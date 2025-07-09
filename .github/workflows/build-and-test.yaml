@@ -7,7 +7,41 @@ on:
         description: 'Slack Notifier Webhook'
         required: true
 jobs:
+  create-helix-conversation:
+    runs-on: macos-15
+    outputs:
+      conversation_id: ${{ steps.create.outputs.conversation_id }}
+      channel_id: ${{ steps.create.outputs.channel_id }}
+    steps:
+      - name: Create Helix conversation
+        id: create
+        env:
+          HELIX_BASE_API_URL: 'https://openam-helix.forgeblocks.com/dpc/jas/helix/v1'
+          HELIX_ENV_ID: '106af4c5-6b44-46e4-9858-037c1a9d9f7c'
+          HELIX_AGENT_ID: 'buildFailureAgent'
+          HELIX_DEFAULT_AGENT_VERSION: 'draft'
+          API_KEY: ${{ secrets.HELIX_AGENT_API_KEY }}
+        run: |
+          create_resp=$(curl -s -w "\n%{http_code}" -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/agents/$HELIX_AGENT_ID/conversations" \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: $API_KEY" \
+            -d "{\"agent\":{\"version\":\"$HELIX_DEFAULT_AGENT_VERSION\"}}")
+          http_body=$(echo "$create_resp" | sed '$d')
+          http_code=$(echo "$create_resp" | tail -n1)
+          echo "Helix agent create conversation HTTP status: $http_code"
+          echo "Helix agent create conversation response body:"
+          echo "$http_body"
+          conversation_id=$(echo "$http_body" | jq -r '.id // empty')
+          channel_id=$(echo "$http_body" | jq -r '.home_channel // empty')
+          if [ "$http_code" -ne 200 ] || [ -z "$conversation_id" ] || [ -z "$channel_id" ]; then
+            echo "Helix agent conversation creation failed."
+            exit 1
+          fi
+          echo "conversation_id=$conversation_id" >> $GITHUB_OUTPUT
+          echo "channel_id=$channel_id" >> $GITHUB_OUTPUT
+
   build-and-test:
+    needs: create-helix-conversation
     strategy:
       fail-fast: false
       matrix:
@@ -85,30 +119,10 @@ jobs:
           HELIX_AGENT_DIFF_INPUT: 'textInputDiff'
           HELIX_AGENT_LOGS_INPUT: 'textInputLogs'
           HELIX_AGENT_STAGE_INPUT: 'textInputStageName'
-          API_KEY: '${{ secrets.HELIX_AGENT_API_KEY }}'
+          API_KEY: ${{ secrets.HELIX_AGENT_API_KEY }}
+          CONVERSATION_ID: ${{ needs.create-helix-conversation.outputs.conversation_id }}
+          CHANNEL_ID: ${{ needs.create-helix-conversation.outputs.channel_id }}
         run: |
-          # Create conversation with debug info
-          create_resp=$(curl -s -w "\n%{http_code}" -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/agents/$HELIX_AGENT_ID/conversations" \
-            -H "Content-Type: application/json" \
-            -H "X-API-Key: $API_KEY" \
-            -d "{\"agent\":{\"version\":\"$HELIX_DEFAULT_AGENT_VERSION\"}}")
-
-          # Split response and status
-          http_body=$(echo "$create_resp" | sed '$d')
-          http_code=$(echo "$create_resp" | tail -n1)
-
-          echo "Helix agent create conversation HTTP status: $http_code"
-          echo "Helix agent create conversation response body:"
-          echo "$http_body"
-
-          conversation_id=$(echo "$http_body" | jq -r '.id // empty')
-          channel_id=$(echo "$http_body" | jq -r '.home_channel // empty')
-
-          if [ "$http_code" -ne 200 ] || [ -z "$conversation_id" ] || [ -z "$channel_id" ]; then
-            echo "Helix agent conversation creation failed."
-            exit 1
-          fi
-
           # Prepare inputs
           git fetch --all --prune --unshallow
           code_diff=$(git diff origin/$GITHUB_BASE_REF...$GITHUB_SHA)
@@ -120,7 +134,7 @@ jobs:
             '{class:"start",content:{($ENV.HELIX_AGENT_DIFF_INPUT):$diff,($ENV.HELIX_AGENT_LOGS_INPUT):$logs,($ENV.HELIX_AGENT_STAGE_INPUT):$stage}}')
 
           # Post message and capture response
-          agent_response=$(curl -s -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/conversations/$conversation_id/channels/$channel_id/messages" \
+          agent_response=$(curl -s -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/conversations/$CONVERSATION_ID/channels/$CHANNEL_ID/messages" \
             -H "Content-Type: application/json" \
             -H "X-API-Key: $API_KEY" \
             -d "$msg_body")
