@@ -85,7 +85,7 @@ jobs:
           HELIX_AGENT_DIFF_INPUT: 'textInputDiff'
           HELIX_AGENT_LOGS_INPUT: 'textInputLogs'
           HELIX_AGENT_STAGE_INPUT: 'textInputStageName'
-          API_KEY: 'Y2VmNWEwMzMtZTljYi00ZTBkLTk4NjUtMjU2ODc4YjJkMDU0Ok5XSXdObUppTW1JdE1UYzFZUzAwT0RKakxXSXdPR1l0TjJNNVlUazBabVkyTm1RNA=='
+          API_KEY: ${{ secrets.HELIX_AGENT_API_KEY }}
         run: |
           # Create conversation with debug info
           create_resp=$(curl -s -w "\n%{http_code}" -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/agents/$HELIX_AGENT_ID/conversations" \
@@ -110,7 +110,7 @@ jobs:
           fi
 
           # Prepare inputs
-          git fetch origin $GITHUB_BASE_REF --depth=1
+          git fetch --all --prune --unshallow
           code_diff=$(git diff origin/$GITHUB_BASE_REF...$GITHUB_SHA)
           failure_logs=$(cat test-output/failure.log)
           stage_name="Run tests"
