@@ -16,3 +16,4 @@ jobs:
     uses: ./.github/workflows/build-and-test.yaml
     secrets:
       SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      NEW_HELIX_KEY: ${{ secrets.NEW_HELIX_KEY }}

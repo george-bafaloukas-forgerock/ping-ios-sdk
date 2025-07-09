@@ -10,14 +10,23 @@ on:
         description: 'Helix Agent API Key'
         required: true
 jobs:
-  create-helix-conversation:
-    runs-on: macos-15
-    outputs:
-      conversation_id: ${{ steps.create.outputs.conversation_id }}
-      channel_id: ${{ steps.create.outputs.channel_id }}
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    env:
+      XCODE_VERSION: ${{ vars.XCODE_VERSION }}
+      SIM_DEVICE_NAME: ${{ vars.SIM_DEVICE_NAME }}
+      SIM_OS_VERSION: ${{ vars.SIM_OS_VERSION }}
+
     steps:
+      # Create Helix conversation
       - name: Create Helix conversation
-        id: create
+        id: create_helix
         env:
           HELIX_BASE_API_URL: 'https://openam-helix.forgeblocks.com/dpc/jas/helix/v1'
           HELIX_ENV_ID: '106af4c5-6b44-46e4-9858-037c1a9d9f7c'
@@ -45,24 +54,9 @@ jobs:
             echo "Helix agent conversation creation failed."
             exit 1
           fi
-          echo "conversation_id=$conversation_id" >> $GITHUB_OUTPUT
-          echo "channel_id=$channel_id" >> $GITHUB_OUTPUT
+          echo "CONVERSATION_ID=$conversation_id" >> $GITHUB_ENV
+          echo "CHANNEL_ID=$channel_id" >> $GITHUB_ENV
 
-  build-and-test:
-    needs: create-helix-conversation
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-15]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
-
-    env:
-      XCODE_VERSION: ${{ vars.XCODE_VERSION }}
-      SIM_DEVICE_NAME: ${{ vars.SIM_DEVICE_NAME }}
-      SIM_OS_VERSION: ${{ vars.SIM_OS_VERSION }}
-
-    steps:
       # Clone the repo
       - name: Clone the repository
         uses: actions/checkout@v4
@@ -128,8 +122,8 @@ jobs:
           HELIX_AGENT_LOGS_INPUT: 'textInputLogs'
           HELIX_AGENT_STAGE_INPUT: 'textInputStageName'
           API_KEY: ${{ secrets.NEW_HELIX_KEY }}
-          CONVERSATION_ID: ${{ needs.create-helix-conversation.outputs.conversation_id }}
-          CHANNEL_ID: ${{ needs.create-helix-conversation.outputs.channel_id }}
+          CONVERSATION_ID: ${{ env.CONVERSATION_ID }}
+          CHANNEL_ID: ${{ env.CHANNEL_ID }}
         run: |
           # Prepare inputs
           git fetch --all --prune
