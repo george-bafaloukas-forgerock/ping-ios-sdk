@@ -24,7 +24,7 @@ jobs:
         run: |
           create_resp=$(curl -s -w "\n%{http_code}" -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/agents/$HELIX_AGENT_ID/conversations" \
             -H "Content-Type: application/json" \
-            -H "X-API-Key: ${#API_KEY}" \
+            -H "X-API-Key: $API_KEY" \
             -d "{\"agent\":{\"version\":\"$HELIX_DEFAULT_AGENT_VERSION\"}}")
           http_body=$(echo "$create_resp" | sed '$d')
           http_code=$(echo "$create_resp" | tail -n1)
@@ -124,7 +124,7 @@ jobs:
           CHANNEL_ID: ${{ needs.create-helix-conversation.outputs.channel_id }}
         run: |
           # Prepare inputs
-          git fetch --all --prune --unshallow
+          git fetch --all --prune
           code_diff=$(git diff origin/$GITHUB_BASE_REF...$GITHUB_SHA)
           failure_logs=$(cat test-output/failure.log)
           stage_name="Run tests"
@@ -136,7 +136,7 @@ jobs:
           # Post message and capture response
           agent_response=$(curl -s -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/conversations/$CONVERSATION_ID/channels/$CHANNEL_ID/messages" \
             -H "Content-Type: application/json" \
-            -H "X-API-Key: ${#API_KEY}" \
+            -H "X-API-Key: $API_KEY" \
             -d "$msg_body")
           {
             echo 'helix_agent_response<<EOF'
