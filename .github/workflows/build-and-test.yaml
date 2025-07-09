@@ -6,6 +6,9 @@ on:
       SLACK_WEBHOOK:
         description: 'Slack Notifier Webhook'
         required: true
+      NEW_HELIX_KEY:
+        description: 'Helix Agent API Key'
+        required: true
 jobs:
   create-helix-conversation:
     runs-on: macos-15
