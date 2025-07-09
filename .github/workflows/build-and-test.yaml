@@ -84,20 +84,28 @@ jobs:
           HELIX_DEFAULT_AGENT_VERSION: 'draft'
           HELIX_AGENT_DIFF_INPUT: 'textInputDiff'
           HELIX_AGENT_LOGS_INPUT: 'textInputLogs'
-          HELIX_AGENT_STAGE_INPUT: ''
+          HELIX_AGENT_STAGE_INPUT: 'textInputStageName'
           API_KEY: ${{ secrets.HELIX_AGENT_API_KEY }}
         run: |
-          # Create conversation
-          create_resp=$(curl -s -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/agents/$HELIX_AGENT_ID/conversations" \
+          # Create conversation with debug info
+          create_resp=$(curl -s -w "\n%{http_code}" -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/agents/$HELIX_AGENT_ID/conversations" \
             -H "Content-Type: application/json" \
             -H "X-API-Key: $API_KEY" \
             -d "{\"agent\":{\"version\":\"$HELIX_DEFAULT_AGENT_VERSION\"}}")
-          conversation_id=$(echo "$create_resp" | jq -r '.id // empty')
-          channel_id=$(echo "$create_resp" | jq -r '.home_channel // empty')
 
-          if [ -z "$conversation_id" ] || [ -z "$channel_id" ]; then
-            echo "Helix agent conversation creation failed. Response:"
-            echo "$create_resp"
+          # Split response and status
+          http_body=$(echo "$create_resp" | sed '$d')
+          http_code=$(echo "$create_resp" | tail -n1)
+
+          echo "Helix agent create conversation HTTP status: $http_code"
+          echo "Helix agent create conversation response body:"
+          echo "$http_body"
+
+          conversation_id=$(echo "$http_body" | jq -r '.id // empty')
+          channel_id=$(echo "$http_body" | jq -r '.home_channel // empty')
+
+          if [ "$http_code" -ne 200 ] || [ -z "$conversation_id" ] || [ -z "$channel_id" ]; then
+            echo "Helix agent conversation creation failed."
             exit 1
           fi
 
