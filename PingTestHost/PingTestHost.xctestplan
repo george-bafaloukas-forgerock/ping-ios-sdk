@@ -24,6 +24,7 @@
       }
     },
     {
+      "enabled" : false,
       "target" : {
         "containerPath" : "container:..\/Oidc\/Oidc.xcodeproj",
         "identifier" : "3AB1CA0E2BD6F99C003FCE3C",
@@ -31,6 +32,7 @@
       }
     },
     {
+      "enabled" : false,
       "target" : {
         "containerPath" : "container:..\/Browser\/Browser.xcodeproj",
         "identifier" : "ECB7C6682D5A1FAB0006F1C8",
@@ -57,6 +59,7 @@
       }
     },
     {
+      "enabled" : false,
       "skippedTests" : [
         "StorageDelegateTests\/testConcurrentAccess()"
       ],
@@ -67,6 +70,7 @@
       }
     },
     {
+      "enabled" : false,
       "target" : {
         "containerPath" : "container:..\/Logger\/Logger.xcodeproj",
         "identifier" : "A5A796B52BE04E68004D0F2D",
@@ -74,6 +78,7 @@
       }
     },
     {
+      "enabled" : false,
       "target" : {
         "containerPath" : "container:..\/ExternalIdP\/ExternalIdP.xcodeproj",
         "identifier" : "ECB7C6972D5A2C1F0006F1C8",

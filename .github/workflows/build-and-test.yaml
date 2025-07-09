@@ -84,7 +84,7 @@ jobs:
           HELIX_DEFAULT_AGENT_VERSION: 'draft'
           HELIX_AGENT_DIFF_INPUT: 'textInputDiff'
           HELIX_AGENT_LOGS_INPUT: 'textInputLogs'
-          HELIX_AGENT_STAGE_INPUT: 'textInputStageName'
+          HELIX_AGENT_STAGE_INPUT: ''
           API_KEY: ${{ secrets.HELIX_AGENT_API_KEY }}
         run: |
           # Create conversation
@@ -92,11 +92,18 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-API-Key: $API_KEY" \
             -d "{\"agent\":{\"version\":\"$HELIX_DEFAULT_AGENT_VERSION\"}}")
-          conversation_id=$(echo "$create_resp" | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])")
-          channel_id=$(echo "$create_resp" | python3 -c "import sys, json; print(json.load(sys.stdin)['home_channel'])")
+          conversation_id=$(echo "$create_resp" | jq -r '.id // empty')
+          channel_id=$(echo "$create_resp" | jq -r '.home_channel // empty')
+
+          if [ -z "$conversation_id" ] || [ -z "$channel_id" ]; then
+            echo "Helix agent conversation creation failed. Response:"
+            echo "$create_resp"
+            exit 1
+          fi
 
           # Prepare inputs
-          code_diff=$(git diff HEAD~1..HEAD)
+          git fetch origin $GITHUB_BASE_REF --depth=1
+          code_diff=$(git diff origin/$GITHUB_BASE_REF...$GITHUB_SHA)
           failure_logs=$(cat test-output/failure.log)
           stage_name="Run tests"
 
