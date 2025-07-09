@@ -64,16 +64,62 @@ jobs:
         id: process_logs
         run: |
           if [ -f test-output/xcodebuild.log ]; then
-            # Get last 500 lines of log file to avoid message size limits
-            tail -n 500 test-output/xcodebuild.log > test-output/failure.log
-            echo "failure_logs=$(cat test-output/failure.log)" >> $GITHUB_OUTPUT
+            # Get last 100 lines of log file to avoid message size limits
+            tail -n 100 test-output/xcodebuild.log > test-output/failure.log
+            {
+              echo 'failure_logs<<EOF'
+              cat test-output/failure.log
+              echo 'EOF'
+            } >> $GITHUB_OUTPUT
           fi
+
+      # Send error logs to Helix agent
+      - name: Send error logs to Helix agent
+        if: failure()
+        id: helix_agent
+        env:
+          HELIX_BASE_API_URL: 'https://openam-helix.forgeblocks.com/dpc/jas/helix/v1'
+          HELIX_ENV_ID: '106af4c5-6b44-46e4-9858-037c1a9d9f7c'
+          HELIX_AGENT_ID: 'buildFailureAgent'
+          HELIX_DEFAULT_AGENT_VERSION: 'draft'
+          HELIX_AGENT_DIFF_INPUT: 'textInputDiff'
+          HELIX_AGENT_LOGS_INPUT: 'textInputLogs'
+          HELIX_AGENT_STAGE_INPUT: 'textInputStageName'
+          API_KEY: ${{ secrets.HELIX_AGENT_API_KEY }}
+        run: |
+          # Create conversation
+          create_resp=$(curl -s -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/agents/$HELIX_AGENT_ID/conversations" \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: $API_KEY" \
+            -d "{\"agent\":{\"version\":\"$HELIX_DEFAULT_AGENT_VERSION\"}}")
+          conversation_id=$(echo "$create_resp" | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])")
+          channel_id=$(echo "$create_resp" | python3 -c "import sys, json; print(json.load(sys.stdin)['home_channel'])")
+
+          # Prepare inputs
+          code_diff=$(git diff HEAD~1..HEAD)
+          failure_logs=$(cat test-output/failure.log)
+          stage_name="Run tests"
+
+          # Construct message
+          msg_body=$(jq -n --arg diff "$code_diff" --arg logs "$failure_logs" --arg stage "$stage_name" \
+            '{class:"start",content:{($ENV.HELIX_AGENT_DIFF_INPUT):$diff,($ENV.HELIX_AGENT_LOGS_INPUT):$logs,($ENV.HELIX_AGENT_STAGE_INPUT):$stage}}')
+
+          # Post message and capture response
+          agent_response=$(curl -s -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/conversations/$conversation_id/channels/$channel_id/messages" \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: $API_KEY" \
+            -d "$msg_body")
+          {
+            echo 'helix_agent_response<<EOF'
+            echo "$agent_response"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
 
       # Publish test results
       - name: Publish test results
         uses: slidoapp/xcresulttool@v3.1.0
         with:
-          title: "Test Results ${{ matrix.os }}"
+          title: "Test Results ${{ matrix.os }} | Helix: ${{ steps.helix_agent.outputs.helix_agent_response }}"
           path: TestResults.xcresult
           show-passed-tests: false
           upload-bundles: never

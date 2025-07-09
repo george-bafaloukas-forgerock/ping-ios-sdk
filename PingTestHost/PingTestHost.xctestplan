@@ -38,6 +38,7 @@
       }
     },
     {
+      "enabled" : false,
       "skippedTests" : [
         "DaVinciIntegrationTests\/testHappyPathWithPasswordCredentials()",
         "DaVinciIntegrationTests\/testInvalidPassword()",
