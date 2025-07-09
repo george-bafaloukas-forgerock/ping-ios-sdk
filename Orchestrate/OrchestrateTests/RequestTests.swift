@@ -43,7 +43,7 @@ final class RequestTests: XCTestCase {
         request.url("https://pingone.com")
         request.header(name: "testHeader", value: "testValue")
         request.header(name: "testHeader1", value: "testValue2")
-        request.header(name: "testHeader1", value: "testValue2")
+        request.header(name: "testHeader2", value: "testValue3")
         request.parameter(name: "key1", value: "key1Value")
         request.parameter(name: "key2", value: "key2Value")
         request.form(formData: body)
