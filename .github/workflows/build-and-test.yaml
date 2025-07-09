@@ -22,6 +22,11 @@ jobs:
           HELIX_DEFAULT_AGENT_VERSION: 'draft'
           API_KEY: ${{ secrets.HELIX_AGENT_API_KEY }}
         run: |
+          echo "API_KEY length: ${#API_KEY}"
+          echo "HELIX_BASE_API_URL: $HELIX_BASE_API_URL"
+          echo "HELIX_ENV_ID: $HELIX_ENV_ID"
+          echo "HELIX_AGENT_ID: $HELIX_AGENT_ID"
+          echo "HELIX_DEFAULT_AGENT_VERSION: $HELIX_DEFAULT_AGENT_VERSION"
           create_resp=$(curl -s -w "\n%{http_code}" -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/agents/$HELIX_AGENT_ID/conversations" \
             -H "Content-Type: application/json" \
             -H "X-API-Key: $API_KEY" \
