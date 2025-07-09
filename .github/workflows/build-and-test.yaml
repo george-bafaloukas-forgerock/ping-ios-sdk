@@ -20,11 +20,11 @@ jobs:
           HELIX_ENV_ID: '106af4c5-6b44-46e4-9858-037c1a9d9f7c'
           HELIX_AGENT_ID: 'buildFailureAgent'
           HELIX_DEFAULT_AGENT_VERSION: 'draft'
-          API_KEY: 'Y2VmNWEwMzMtZTljYi00ZTBkLTk4NjUtMjU2ODc4YjJkMDU0Ok5XSXdObUppTW1JdE1UYzFZUzAwT0RKakxXSXdPR1l0TjJNNVlUazBabVkyTm1RNA=='
+          API_KEY: ${{ secrets.HELIX_AGENT_API_KEY }}
         run: |
           create_resp=$(curl -s -w "\n%{http_code}" -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/agents/$HELIX_AGENT_ID/conversations" \
             -H "Content-Type: application/json" \
-            -H "X-API-Key: $API_KEY" \
+            -H "X-API-Key: ${#API_KEY}" \
             -d "{\"agent\":{\"version\":\"$HELIX_DEFAULT_AGENT_VERSION\"}}")
           http_body=$(echo "$create_resp" | sed '$d')
           http_code=$(echo "$create_resp" | tail -n1)
@@ -136,7 +136,7 @@ jobs:
           # Post message and capture response
           agent_response=$(curl -s -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/conversations/$CONVERSATION_ID/channels/$CHANNEL_ID/messages" \
             -H "Content-Type: application/json" \
-            -H "X-API-Key: $API_KEY" \
+            -H "X-API-Key: ${#API_KEY}" \
             -d "$msg_body")
           {
             echo 'helix_agent_response<<EOF'
