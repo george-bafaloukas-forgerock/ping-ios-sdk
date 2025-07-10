@@ -157,8 +157,8 @@ jobs:
         run: |
           # Extract the value field from the content array
           value_field=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | jq -r '.content[0].value // empty')
-          # Remove code block markers and leading 'json'
-          clean_json=$(echo "$value_field" | sed -e 's/^```json//' -e 's/^```//' -e 's/```$//' | sed '/^$/d')
+          # Remove leading 'json' (with or without newline), code block markers, and blank lines
+          clean_json=$(echo "$value_field" | sed -e '1s/^json[[:space:]]*//' -e 's/^```json//' -e 's/^```//' -e 's/```$//' | sed '/^$/d')
           short_analysis=$(echo "$clean_json" | jq -r '.shortAnalysis // empty')
           affected_files=$(echo "$clean_json" | jq -r '.affectedFiles[]? | "• " + .file + ":" + .lines + " - " + .comment' | paste -sd '\n' -)
           echo "short_analysis<<EOF" >> $GITHUB_OUTPUT
