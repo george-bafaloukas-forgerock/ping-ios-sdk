@@ -157,11 +157,11 @@ jobs:
         shell: bash
         run: |
           # Extract the value field from the content array
-          value_field=$(jq -r '.content[0].value // empty' <<< "${{ steps.helix_agent.outputs.helix_agent_response }}")
+          value_field=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | jq -r '.content[0].value // empty')
           echo "BuildFailureAgent: Processing response value: $value_field"
           # Remove leading/trailing code block markers and replace literal \n with newlines
           cleaned=$(echo "$value_field" | sed 's/^```json\\n//' | sed 's/\\n```$//')
-          unescaped=$(echo -e "$cleaned")
+          unescaped=$(printf "%b" "$cleaned")
           # Try to pretty-print as JSON and extract fields
           if echo "$unescaped" | jq . >/dev/null 2>&1; then
             short_analysis=$(echo "$unescaped" | jq -r '.shortAnalysis // empty')
