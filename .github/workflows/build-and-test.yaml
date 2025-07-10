@@ -156,17 +156,20 @@ jobs:
         id: parse_helix
         shell: bash
         run: |
-          # Extract the value field from the content array using Perl for multiline and escaped quotes
-          value_field=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | perl -0777 -ne 'print $1 if /"value"\s*:\s*"(.*?)"[\},]/s')
-          echo "BuildFailureAgent: Processing response value: $value_field"
+          # Use the full Helix agent response for parsing, skipping value_field
+          echo "BuildFailureAgent: Processing response: ${{ steps.helix_agent.outputs.helix_agent_response }}"
           # Remove leading/trailing code block markers and replace literal \n with newlines
-          cleaned=$(echo "$value_field" | sed 's/^```json\\n//' | sed 's/\\n```$//')
+          cleaned=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | sed 's/^```json\\n//' | sed 's/\\n```$//')
           unescaped=$(printf "%b" "$cleaned")
           # Extract short_analysis and affected_files using regex
-          short_analysis=$(echo "$unescaped" | grep -o '"shortAnalysis"[ ]*:[ ]*"\([^"].*\)"' | sed 's/.*:[ ]*"\(.*\)"/\1/')
-          affected_files=$(echo "$unescaped" | grep -o '"affectedFiles"[ ]*:[ ]*\[[^\]]*\]' | sed 's/.*:[ ]*\(\[[^\]]*\]\)/\1/')
-          echo "short_analysis=$short_analysis" >> $GITHUB_ENV
-          echo "affected_files=$affected_files" >> $GITHUB_ENV
+          # Use Perl for robust multiline and special character extraction, escaping parentheses
+          short_analysis=$(echo "$unescaped" | perl -0777 -ne 'print $1 if /"shortAnalysis"\s*:\s*"((?:[^"\\]|\\.)*)"/s')
+          affected_files=$(echo "$unescaped" | perl -0777 -ne 'print $1 if /"affectedFiles"\s*:\s*(\[[^\]]*\])/s')
+          # Escape parentheses for downstream use
+          short_analysis_escaped=$(echo "$short_analysis" | sed 's/(/\\(/g; s/)/\\)/g')
+          affected_files_escaped=$(echo "$affected_files" | sed 's/(/\\(/g; s/)/\\)/g')
+          echo "short_analysis=$short_analysis_escaped" >> $GITHUB_ENV
+          echo "affected_files=$affected_files_escaped" >> $GITHUB_ENV
 
       # Publish test results
       - name: Publish test results
