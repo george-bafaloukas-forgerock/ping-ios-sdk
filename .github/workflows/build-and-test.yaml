@@ -157,7 +157,7 @@ jobs:
         shell: bash
         run: |
           # Extract the value field from the content array
-          value_field=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | jq -r '.content[0].value // empty')
+          value_field=$(jq -r '.content[0].value // empty' <<< "${{ steps.helix_agent.outputs.helix_agent_response }}")
           echo "BuildFailureAgent: Processing response value: $value_field"
           # Remove leading/trailing code block markers and replace literal \n with newlines
           cleaned=$(echo "$value_field" | sed 's/^```json\\n//' | sed 's/\\n```$//')
