@@ -128,7 +128,11 @@ jobs:
           # Prepare inputs
           git fetch --all --prune
           code_diff=$(git diff origin/develop...HEAD)
+          echo "CODE_DIFF:"
+          echo "$code_diff"
           failure_logs=$(cat test-output/failure.log)
+          echo "FAILURE_LOGS:"
+          echo "$failure_logs"
           stage_name="Run tests"
 
           # Construct message
@@ -164,7 +168,7 @@ jobs:
           fields: repo,author,eventName,message,job,pullRequest,took
           status: ${{ job.status }}
           text: |
-            ${{ job.status == 'failure' && format('Test Failure Logs:\n```{0}```', steps.process_logs.outputs.failure_logs) || '' }}
+            ${{ job.status == 'failure' && format('Test Failure Logs:\n```{0}```\nHelix Agent Response:\n```{1}```', steps.process_logs.outputs.failure_logs, steps.helix_agent.outputs.helix_agent_response) || '' }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
         if: always()
