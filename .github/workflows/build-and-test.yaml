@@ -157,25 +157,16 @@ jobs:
         shell: bash
         run: |
           # Extract the value field from the content array
-          value_field=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | jq -r '.content[0].value // empty')
+          value_field=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | grep -o '"value"[ ]*:[ ]*"\([^"].*\)"' | sed 's/.*:[ ]*"\(.*\)"/\1/')
           echo "BuildFailureAgent: Processing response value: $value_field"
           # Remove leading/trailing code block markers and replace literal \n with newlines
           cleaned=$(echo "$value_field" | sed 's/^```json\\n//' | sed 's/\\n```$//')
           unescaped=$(printf "%b" "$cleaned")
-          # Try to pretty-print as JSON and extract fields
-          if echo "$unescaped" | jq . >/dev/null 2>&1; then
-            short_analysis=$(echo "$unescaped" | jq -r '.shortAnalysis // empty')
-            affected_files=$(echo "$unescaped" | jq -r '.affectedFiles[]? | "• " + .file + ":" + .lines + " - " + .comment' | paste -sd '\n' -)
-          else
-            short_analysis="[Helix agent response could not be parsed]"
-            affected_files="[Helix agent response could not be parsed]"
-          fi
-          echo "short_analysis<<EOF" >> $GITHUB_OUTPUT
-          echo "$short_analysis" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          echo "affected_files<<EOF" >> $GITHUB_OUTPUT
-          echo "$affected_files" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # Extract short_analysis and affected_files using regex
+          short_analysis=$(echo "$unescaped" | grep -o '"shortAnalysis"[ ]*:[ ]*"\([^"]\+\)"' | sed 's/.*:[ ]*"\([^"]\+\)"/\1/')
+          affected_files=$(echo "$unescaped" | grep -o '"affectedFiles"[ ]*:[ ]*\[[^\]]*\]' | sed 's/.*:[ ]*\(\[[^\]]*\]\)/\1/')
+          echo "short_analysis=$short_analysis" >> $GITHUB_ENV
+          echo "affected_files=$affected_files" >> $GITHUB_ENV
 
       # Publish test results
       - name: Publish test results
