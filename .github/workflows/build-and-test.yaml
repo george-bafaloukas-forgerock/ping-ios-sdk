@@ -6,6 +6,9 @@ on:
       SLACK_WEBHOOK:
         description: 'Slack Notifier Webhook'
         required: true
+      NEW_HELIX_KEY:
+        description: 'Helix Agent API Key'
+        required: true
 jobs:
   build-and-test:
     strategy:
@@ -21,6 +24,39 @@ jobs:
       SIM_OS_VERSION: ${{ vars.SIM_OS_VERSION }}
 
     steps:
+      # Create Helix conversation
+      - name: Create Helix conversation
+        id: create_helix
+        env:
+          HELIX_BASE_API_URL: 'https://openam-helix.forgeblocks.com/dpc/jas/helix/v1'
+          HELIX_ENV_ID: '106af4c5-6b44-46e4-9858-037c1a9d9f7c'
+          HELIX_AGENT_ID: 'buildFailureAgent'
+          HELIX_DEFAULT_AGENT_VERSION: 'draft'
+          API_KEY: ${{ secrets.NEW_HELIX_KEY }}
+        run: |
+          echo "API_KEY length: ${#API_KEY}"
+          echo "HELIX_BASE_API_URL: $HELIX_BASE_API_URL"
+          echo "HELIX_ENV_ID: $HELIX_ENV_ID"
+          echo "HELIX_AGENT_ID: $HELIX_AGENT_ID"
+          echo "HELIX_DEFAULT_AGENT_VERSION: $HELIX_DEFAULT_AGENT_VERSION"
+          create_resp=$(curl -s -w "\n%{http_code}" -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/agents/$HELIX_AGENT_ID/conversations" \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: $API_KEY" \
+            -d "{\"agent\":{\"version\":\"$HELIX_DEFAULT_AGENT_VERSION\"}}")
+          http_body=$(echo "$create_resp" | sed '$d')
+          http_code=$(echo "$create_resp" | tail -n1)
+          echo "Helix agent create conversation HTTP status: $http_code"
+          echo "Helix agent create conversation response body:"
+          echo "$http_body"
+          conversation_id=$(echo "$http_body" | jq -r '.id // empty')
+          channel_id=$(echo "$http_body" | jq -r '.home_channel // empty')
+          if [ "$http_code" -ne 200 ] || [ -z "$conversation_id" ] || [ -z "$channel_id" ]; then
+            echo "Helix agent conversation creation failed."
+            exit 1
+          fi
+          echo "CONVERSATION_ID=$conversation_id" >> $GITHUB_ENV
+          echo "CHANNEL_ID=$channel_id" >> $GITHUB_ENV
+
       # Clone the repo
       - name: Clone the repository
         uses: actions/checkout@v4
@@ -40,10 +76,13 @@ jobs:
         
       # Run all tests
       - name: Run tests
+        id: test_step
         run: |
           DEST="platform=iOS Simulator,name=${SIM_DEVICE_NAME},OS=${SIM_OS_VERSION}"
           echo "Running tests on $DEST"
 
+          # Capture test output to a file
+          mkdir -p test-output
           xcodebuild test \
           -scheme PingTestHost \
           -workspace SampleApps/Ping.xcworkspace \
@@ -51,15 +90,71 @@ jobs:
           -destination "$DEST" \
           -derivedDataPath DerivedData \
           -enableCodeCoverage YES \
-          -resultBundlePath TestResults | xcpretty
+          -resultBundlePath TestResults 2>&1 | tee test-output/xcodebuild.log | xcpretty
           
           exit ${PIPESTATUS[0]}
+
+      # Read test output if tests failed
+      - name: Process test output
+        if: failure()
+        id: process_logs
+        run: |
+          if [ -f test-output/xcodebuild.log ]; then
+            # Get last 100 lines of log file to avoid message size limits
+            tail -n 100 test-output/xcodebuild.log > test-output/failure.log
+            {
+              echo 'failure_logs<<EOF'
+              cat test-output/failure.log
+              echo 'EOF'
+            } >> $GITHUB_OUTPUT
+          fi
+
+      # Send error logs to Helix agent
+      - name: Send error logs to Helix agent
+        if: failure()
+        id: helix_agent
+        env:
+          HELIX_BASE_API_URL: 'https://openam-helix.forgeblocks.com/dpc/jas/helix/v1'
+          HELIX_ENV_ID: '106af4c5-6b44-46e4-9858-037c1a9d9f7c'
+          HELIX_AGENT_ID: 'buildFailureAgent'
+          HELIX_DEFAULT_AGENT_VERSION: 'draft'
+          HELIX_AGENT_DIFF_INPUT: 'textInputDiff'
+          HELIX_AGENT_LOGS_INPUT: 'textInputLogs'
+          HELIX_AGENT_STAGE_INPUT: 'textInputStageName'
+          API_KEY: ${{ secrets.NEW_HELIX_KEY }}
+          CONVERSATION_ID: ${{ env.CONVERSATION_ID }}
+          CHANNEL_ID: ${{ env.CHANNEL_ID }}
+        run: |
+          # Prepare inputs
+          git fetch --all --prune
+          code_diff=$(git diff origin/develop...HEAD)
+          echo "CODE_DIFF:"
+          echo "$code_diff"
+          failure_logs=$(cat test-output/failure.log)
+          echo "FAILURE_LOGS:"
+          echo "$failure_logs"
+          stage_name="Run tests"
+
+          # Construct message
+          msg_body=$(jq -n --arg diff "$code_diff" --arg logs "$failure_logs" --arg stage "$stage_name" \
+            '{class:"start",content:{($ENV.HELIX_AGENT_DIFF_INPUT):$diff,($ENV.HELIX_AGENT_LOGS_INPUT):$logs,($ENV.HELIX_AGENT_STAGE_INPUT):$stage}}')
+
+          # Post message and capture response
+          agent_response=$(curl -s -X POST "$HELIX_BASE_API_URL/environments/$HELIX_ENV_ID/conversations/$CONVERSATION_ID/channels/$CHANNEL_ID/messages" \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: $API_KEY" \
+            -d "$msg_body")
+          {
+            echo 'helix_agent_response<<EOF'
+            echo "$agent_response"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
 
       # Publish test results
       - name: Publish test results
         uses: slidoapp/xcresulttool@v3.1.0
         with:
-          title: "Test Results ${{ matrix.os }} - ${{ env.CHIP_TYPE }}"
+          title: "Test Results ${{ matrix.os }} | Helix: ${{ steps.helix_agent.outputs.helix_agent_response }}"
           path: TestResults.xcresult
           show-passed-tests: false
           upload-bundles: never
@@ -68,10 +163,12 @@ jobs:
       # Send slack notification with result status
       - uses: 8398a7/action-slack@v3
         with:
-          mention: 'stoyan.petrov'
+          mention: 'george.bafaloukas'
           if_mention: 'failure,cancelled'
           fields: repo,author,eventName,message,job,pullRequest,took
           status: ${{ job.status }}
+          text: |
+            ${{ job.status == 'failure' && format('Test Failure Logs:\n```{0}```\nHelix Agent Response:\n```{1}```', steps.process_logs.outputs.failure_logs, steps.helix_agent.outputs.helix_agent_response) || '' }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
         if: always()
