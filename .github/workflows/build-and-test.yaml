@@ -157,8 +157,12 @@ jobs:
         run: |
           # Extract the value field from the content array
           value_field=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | jq -r '.content[0].value // empty')
-          # Remove leading 'json' (with or without newline), code block markers, and blank lines
-          clean_json=$(echo "$value_field" | sed -e '1s/^json[[:space:]]*//' -e 's/^```json//' -e 's/^```//' -e 's/```$//' | sed '/^$/d')
+          # Remove leading 'json', code block markers, and blank lines
+          clean_json=$(echo "$value_field" | sed -e '1s/^json[[:space:]]*//' -e '1s/^```json[[:space:]]*//' -e '1s/^```[[:space:]]*//' -e 's/```$//' | sed '/^$/d')
+          # If the string is still wrapped in a code block, remove it
+          if echo "$clean_json" | grep -q '^```'; then
+            clean_json=$(echo "$clean_json" | sed -e '1d' -e '$d')
+          fi
           short_analysis=$(echo "$clean_json" | jq -r '.shortAnalysis // empty')
           affected_files=$(echo "$clean_json" | jq -r '.affectedFiles[]? | "• " + .file + ":" + .lines + " - " + .comment' | paste -sd '\n' -)
           echo "short_analysis<<EOF" >> $GITHUB_OUTPUT
@@ -189,7 +193,7 @@ jobs:
             ${{
               job.status == 'failure'
               && format(
-                'Test Failure Logs:\n```{0}```\nHelix Agent Response (raw):\n```{1}```\nHelix Analysis: {2}\nAffected Files:\n{3}',
+                'Test Failure Logs:\n ```{0}``` \nHelix Agent Response (raw):\n ```{1}``` \nHelix Analysis: {2} \nAffected Files: \n{3}',
                 steps.process_logs.outputs.failure_logs,
                 steps.helix_agent.outputs.helix_agent_response,
                 steps.parse_helix.outputs.short_analysis,
@@ -200,3 +204,18 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
         if: always()
+
+      # Comment on PR with Helix analysis result
+      - name: Comment on PR with Helix analysis
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const analysis = `### Helix Build/Test Failure Analysis\n\n**Short Analysis:**\n${{ steps.parse_helix.outputs.short_analysis || 'N/A' }}\n\n**Affected Files:**\n${{ steps.parse_helix.outputs.affected_files || 'N/A' }}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.name,
+              issue_number: context.issue.number,
+              body: analysis
+            });
