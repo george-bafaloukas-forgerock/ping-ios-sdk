@@ -127,7 +127,7 @@ jobs:
         run: |
           # Prepare inputs
           git fetch --all --prune
-          code_diff=$(git diff origin/$GITHUB_BASE_REF...$GITHUB_SHA)
+          code_diff=$(git diff origin/develop...HEAD)
           failure_logs=$(cat test-output/failure.log)
           stage_name="Run tests"
 
