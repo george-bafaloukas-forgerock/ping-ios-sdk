@@ -159,32 +159,13 @@ jobs:
           # Extract the value field from the content array
           value_field=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | jq -r '.content[0].value // empty')
           echo "BuildFailureAgent: Processing response value: $value_field"
-          # Try direct JSON parse
-          short_analysis=""
-          affected_files=""
-          parse_success=0
-          if echo "$value_field" | jq . >/dev/null 2>&1; then
-            clean_json="$value_field"
-            parse_success=1
-          else
-            echo "BuildFailureAgent: Direct JSON parsing failed, trying to extract from markdown"
-            # Try to extract JSON from code block (```json ... ``` or ``` ... ```)
-            extracted_json=$(echo "$value_field" | perl -0777 -ne 'print $1 if /```(?:json)?\s*(\{.*?\})\s*```/s')
-            if [ -n "$extracted_json" ]; then
-              echo "BuildFailureAgent: Extracted JSON from markdown: $extracted_json"
-              if echo "$extracted_json" | jq . >/dev/null 2>&1; then
-                clean_json="$extracted_json"
-                parse_success=1
-              else
-                echo "BuildFailureAgent: Failed to parse extracted JSON from markdown"
-              fi
-            else
-              echo "BuildFailureAgent: Could not extract valid JSON from agent response"
-            fi
-          fi
-          if [ "$parse_success" -eq 1 ]; then
-            short_analysis=$(echo "$clean_json" | jq -r '.shortAnalysis // empty')
-            affected_files=$(echo "$clean_json" | jq -r '.affectedFiles[]? | "• " + .file + ":" + .lines + " - " + .comment' | paste -sd '\n' -)
+          # Remove leading/trailing code block markers and replace literal \n with newlines
+          cleaned=$(echo "$value_field" | sed 's/^```json\\n//' | sed 's/\\n```$//')
+          unescaped=$(echo -e "$cleaned")
+          # Try to pretty-print as JSON and extract fields
+          if echo "$unescaped" | jq . >/dev/null 2>&1; then
+            short_analysis=$(echo "$unescaped" | jq -r '.shortAnalysis // empty')
+            affected_files=$(echo "$unescaped" | jq -r '.affectedFiles[]? | "• " + .file + ":" + .lines + " - " + .comment' | paste -sd '\n' -)
           else
             short_analysis="[Helix agent response could not be parsed]"
             affected_files="[Helix agent response could not be parsed]"
@@ -217,7 +198,7 @@ jobs:
             ${{
               job.status == 'failure'
               && format(
-                'Test Failure Logs:\n ```{0}``` \nHelix Agent Response (raw):\n ```{1}``` \nHelix Analysis: {2} \nAffected Files: \n{3}',
+                '*Test Failure Logs:*\n```\n{0}\n```\n*Helix Agent Response (raw):*\n```json\n{1}\n```\n*Helix Analysis:*\n*Short Analysis:*\n*{2}*\n*Affected Files:*\n*{3}*',
                 steps.process_logs.outputs.failure_logs,
                 steps.helix_agent.outputs.helix_agent_response,
                 steps.parse_helix.outputs.short_analysis,
