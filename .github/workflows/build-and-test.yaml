@@ -150,6 +150,21 @@ jobs:
             echo 'EOF'
           } >> $GITHUB_OUTPUT
 
+      # Parse Helix agent response for Slack
+      - name: Parse Helix agent response
+        if: failure()
+        id: parse_helix
+        run: |
+          raw_json=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | sed 's/^json//')
+          short_analysis=$(echo "$raw_json" | jq -r '.shortAnalysis // empty')
+          affected_files=$(echo "$raw_json" | jq -r '.affectedFiles[]? | "• " + .file + ":" + .lines + " - " + .comment' | paste -sd '\n' -)
+          echo "short_analysis<<EOF" >> $GITHUB_OUTPUT
+          echo "$short_analysis" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "affected_files<<EOF" >> $GITHUB_OUTPUT
+          echo "$affected_files" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       # Publish test results
       - name: Publish test results
         uses: slidoapp/xcresulttool@v3.1.0
@@ -168,7 +183,17 @@ jobs:
           fields: repo,author,eventName,message,job,pullRequest,took
           status: ${{ job.status }}
           text: |
-            ${{ job.status == 'failure' && format('Test Failure Logs:\n```{0}```\nHelix Agent Response:\n```{1}```', steps.process_logs.outputs.failure_logs, steps.helix_agent.outputs.helix_agent_response) || '' }}
+            ${{
+              job.status == 'failure'
+              && format(
+                'Test Failure Logs:\n```{0}```\nHelix Agent Response (raw):\n```{1}```\nHelix Analysis: {2}\nAffected Files:\n{3}',
+                steps.process_logs.outputs.failure_logs,
+                steps.helix_agent.outputs.helix_agent_response,
+                steps.parse_helix.outputs.short_analysis,
+                steps.parse_helix.outputs.affected_files
+              )
+              || ''
+            }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
         if: always()

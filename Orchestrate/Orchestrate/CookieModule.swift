@@ -31,6 +31,7 @@ public class CookieModule {
             if let url = request.urlRequest.url, let cookies = cookies {
                 await CookieModule.inject(url: url,
                                           cookies: cookies,
+                                          storage: setup.config.inMemoryStorage,
                                           request: request)
             }
             return request
@@ -44,7 +45,7 @@ public class CookieModule {
                 }
                 // Inject persisted cookies from cookie storage if available
                 if let cookies = try? await setup.config.cookieStorage.get() {
-                    await CookieModule.inject(url: url, cookies: cookies, request: request)
+                    await CookieModule.inject(url: url, cookies: cookies, storage: setup.config.inMemoryStorage, request: request)
                 }
             }
             return request
@@ -64,7 +65,7 @@ public class CookieModule {
         setup.signOff { request in
             if let url = request.urlRequest.url {
                 if let cookies = try? await setup.config.cookieStorage.get() {
-                    await CookieModule.inject(url: url, cookies: cookies, request: request)
+                    await CookieModule.inject(url: url, cookies: cookies, storage: setup.config.inMemoryStorage, request: request)
                 }
                 try? await setup.config.cookieStorage.delete()
                 await setup.config.inMemoryStorage.deleteCookies(url: url)
@@ -80,7 +81,10 @@ public class CookieModule {
     ///   - request: The HTTP request to modify.
     static func inject(url: URL,
                        cookies: [CustomHTTPCookie],
+                       storage: InMemoryCookieStorage?,
                        request: Request) async {
+        
+        await storage?.deleteCookies(url: url)
         
         let persistedTempCookiesStorage = InMemoryCookieStorage()
         let httpCookies = cookies.compactMap { $0.toHTTPCookie() }
@@ -105,6 +109,8 @@ public class CookieModule {
                                        cookies: [HTTPCookie],
                                        storage: InMemoryCookieStorage?,
                                        cookieConfig: CookieConfig) async {
+        
+        await storage?.deleteCookies(url: url)
         
         let persistCookies = cookies.filter { cookieConfig.persist.contains($0.name) }
         let otherCookies = cookies.filter { !cookieConfig.persist.contains($0.name) }
