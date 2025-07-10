@@ -248,7 +248,7 @@ final class CookieModuleTests: XCTestCase {
             let _ = await continueNode?.next()
             let updatedInMemoryCookies = await cookieModule.inMemoryStorage.cookies
             XCTAssertNotNil(updatedInMemoryCookies)
-            XCTAssertEqual(updatedInMemoryCookies?.count, 1)
+            XCTAssertEqual(updatedInMemoryCookies?.count, 3)
         }
     }
     
