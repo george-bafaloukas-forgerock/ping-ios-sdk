@@ -154,15 +154,22 @@ jobs:
       - name: Parse Helix agent response
         if: failure()
         id: parse_helix
+        shell: bash
         run: |
           # Extract the value field from the content array
           value_field=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | jq -r '.content[0].value // empty')
-          # Remove leading 'json', code block markers, and blank lines
-          clean_json=$(echo "$value_field" | sed -e '1s/^json[[:space:]]*//' -e '1s/^```json[[:space:]]*//' -e '1s/^```[[:space:]]*//' -e 's/```$//' | sed '/^$/d')
-          # If the string is still wrapped in a code block, remove it
-          if echo "$clean_json" | grep -q '^```'; then
-            clean_json=$(echo "$clean_json" | sed -e '1d' -e '$d')
+          # Remove leading 'json', code block markers, and blank lines (robust for multiline)
+          clean_json=$(echo "$value_field" | sed -e '1s/^json[[:space:]]*//' -e '1s/^```json[[:space:]]*//' -e '1s/^```[[:space:]]*//' -e 's/```$//' | awk 'NR==1 && /^```/ {next} NR==NF && /^```/ {next} {print}' | sed '/^$/d')
+          # Remove any remaining code block markers on first/last line
+          first_line=$(echo "$clean_json" | head -n1)
+          last_line=$(echo "$clean_json" | tail -n1)
+          if [[ "$first_line" =~ ^``` ]]; then
+            clean_json=$(echo "$clean_json" | tail -n +2)
           fi
+          if [[ "$last_line" =~ ^``` ]]; then
+            clean_json=$(echo "$clean_json" | head -n -1)
+          fi
+          # Now parse JSON
           short_analysis=$(echo "$clean_json" | jq -r '.shortAnalysis // empty')
           affected_files=$(echo "$clean_json" | jq -r '.affectedFiles[]? | "• " + .file + ":" + .lines + " - " + .comment' | paste -sd '\n' -)
           echo "short_analysis<<EOF" >> $GITHUB_OUTPUT
@@ -209,13 +216,21 @@ jobs:
       - name: Comment on PR with Helix analysis
         if: failure() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
+        env:
+          SHORT_ANALYSIS: ${{ steps.parse_helix.outputs.short_analysis }}
+          AFFECTED_FILES: ${{ steps.parse_helix.outputs.affected_files }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const analysis = `### Helix Build/Test Failure Analysis\n\n**Short Analysis:**\n${{ steps.parse_helix.outputs.short_analysis || 'N/A' }}\n\n**Affected Files:**\n${{ steps.parse_helix.outputs.affected_files || 'N/A' }}`;
+            const prNumber = github.context.payload.pull_request.number;
+            const owner = github.context.repo.owner;
+            const repo = github.context.repo.repo;
+            const shortAnalysis = process.env.SHORT_ANALYSIS || 'N/A';
+            const affectedFiles = process.env.AFFECTED_FILES || 'N/A';
+            const analysis = `### Helix Build/Test Failure Analysis\n\n**Short Analysis:**\n${shortAnalysis}\n\n**Affected Files:**\n${affectedFiles}`;
             await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.name,
-              issue_number: context.issue.number,
+              owner,
+              repo,
+              issue_number: prNumber,
               body: analysis
             });
