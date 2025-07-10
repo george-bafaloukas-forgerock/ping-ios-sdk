@@ -156,14 +156,14 @@ jobs:
         id: parse_helix
         shell: bash
         run: |
-          # Extract the value field from the content array
-          value_field=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | grep -o '"value"[ ]*:[ ]*"\([^"].*\)"' | sed 's/.*:[ ]*"\(.*\)"/\1/')
+          # Extract the value field from the content array using Perl for multiline and escaped quotes
+          value_field=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | perl -0777 -ne 'print $1 if /"value"\s*:\s*"(.*?)"[\},]/s')
           echo "BuildFailureAgent: Processing response value: $value_field"
           # Remove leading/trailing code block markers and replace literal \n with newlines
           cleaned=$(echo "$value_field" | sed 's/^```json\\n//' | sed 's/\\n```$//')
           unescaped=$(printf "%b" "$cleaned")
           # Extract short_analysis and affected_files using regex
-          short_analysis=$(echo "$unescaped" | grep -o '"shortAnalysis"[ ]*:[ ]*"\([^"]\+\)"' | sed 's/.*:[ ]*"\([^"]\+\)"/\1/')
+          short_analysis=$(echo "$unescaped" | grep -o '"shortAnalysis"[ ]*:[ ]*"\([^"].*\)"' | sed 's/.*:[ ]*"\(.*\)"/\1/')
           affected_files=$(echo "$unescaped" | grep -o '"affectedFiles"[ ]*:[ ]*\[[^\]]*\]' | sed 's/.*:[ ]*\(\[[^\]]*\]\)/\1/')
           echo "short_analysis=$short_analysis" >> $GITHUB_ENV
           echo "affected_files=$affected_files" >> $GITHUB_ENV
