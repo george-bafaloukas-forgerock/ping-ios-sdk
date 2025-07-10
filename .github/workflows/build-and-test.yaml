@@ -155,9 +155,12 @@ jobs:
         if: failure()
         id: parse_helix
         run: |
-          raw_json=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | sed 's/^json//')
-          short_analysis=$(echo "$raw_json" | jq -r '.shortAnalysis // empty')
-          affected_files=$(echo "$raw_json" | jq -r '.affectedFiles[]? | "• " + .file + ":" + .lines + " - " + .comment' | paste -sd '\n' -)
+          # Extract the value field from the content array
+          value_field=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | jq -r '.content[0].value // empty')
+          # Remove code block markers and leading 'json'
+          clean_json=$(echo "$value_field" | sed -e 's/^```json//' -e 's/^```//' -e 's/```$//' | sed '/^$/d')
+          short_analysis=$(echo "$clean_json" | jq -r '.shortAnalysis // empty')
+          affected_files=$(echo "$clean_json" | jq -r '.affectedFiles[]? | "• " + .file + ":" + .lines + " - " + .comment' | paste -sd '\n' -)
           echo "short_analysis<<EOF" >> $GITHUB_OUTPUT
           echo "$short_analysis" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
