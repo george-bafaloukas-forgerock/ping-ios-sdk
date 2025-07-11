@@ -36,7 +36,7 @@ jobs:
           cleaned=$(echo "$cleaned" | awk '{$1=$1};1')
           # Parse and echo only the embedded JSON keys and values
           echo "Embedded JSON keys and values (from content[0]['value']):"
-          python3 -c "import sys, json; s=sys.stdin.read();\ntry:\n    obj = json.loads(s)\n    for k, v in obj.items():\n        print(f'{k}: {v}')\nexcept Exception as e:\n    print('Embedded JSON decode error:', e)\n    print('Raw embedded JSON:')\n    print(s)" <<< "$cleaned"
+          python3 -c "import sys, json; s = sys.stdin.read()\ntry:\n    obj = json.loads(s)\n    for k, v in obj.items():\n        print(f'{k}: {v}')\nexcept Exception as e:\n    print('Embedded JSON decode error:', e)\n    print('Raw embedded JSON:')\n    print(s)" <<< "$cleaned"
       # Create Helix conversation
       - name: Create Helix conversation
         id: create_helix
