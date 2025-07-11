@@ -172,20 +172,19 @@ jobs:
         id: parse_helix
         shell: bash
         run: |
-          # Use the full Helix agent response for parsing, skipping value_field
-          echo "BuildFailureAgent: Processing response: ${{ steps.helix_agent.outputs.helix_agent_response }}"
-          # Remove leading/trailing code block markers and replace literal \n with newlines
-          cleaned=$(echo "${{ steps.helix_agent.outputs.helix_agent_response }}" | sed 's/^```json\\n//' | sed 's/\\n```$//')
-          unescaped=$(printf "%b" "$cleaned")
-          # Extract short_analysis and affected_files using regex
-          # Use Perl for robust multiline and special character extraction, escaping parentheses
-          short_analysis=$(echo "$unescaped" | perl -0777 -ne 'print $1 if /"shortAnalysis"\s*:\s*"((?:[^"\\]|\\.)*)"/s')
-          affected_files=$(echo "$unescaped" | perl -0777 -ne 'print $1 if /"affectedFiles"\s*:\s*(\[[^\]]*\])/s')
-          # Escape parentheses for downstream use
-          short_analysis_escaped=$(echo "$short_analysis" | sed 's/(/\\(/g; s/)/\\)/g')
-          affected_files_escaped=$(echo "$affected_files" | sed 's/(/\\(/g; s/)/\\)/g')
-          echo "short_analysis=$short_analysis_escaped" >> $GITHUB_ENV
-          echo "affected_files=$affected_files_escaped" >> $GITHUB_ENV
+          static_response="${{ steps.helix_agent.outputs.helix_agent_response }}"
+          # Only decode the embedded JSON in the content[0]['value'] field
+          value_field=$(echo "$static_response" | python3 -c "import sys, json; obj=json.load(sys.stdin); print(obj['content'][0]['value'])")
+          # Remove triple backticks and leading/trailing whitespace
+          cleaned=$(echo "$value_field" | sed 's/^```json//' | sed 's/^```//' | sed 's/```$//' | sed 's/```//g')
+          cleaned=$(echo "$cleaned" | awk '{$1=$1};1')
+          # Extract shortAnalysis from cleaned JSON
+          short_analysis=$(echo "$cleaned" | python3 -c "import sys, json; s=sys.stdin.read(); print(json.loads(s)['shortAnalysis'])")
+          echo "Short Analysis: $short_analysis"
+          # Make short_analysis available for later steps
+          echo "short_analysis<<EOF" >> $GITHUB_OUTPUT
+          echo "$short_analysis" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       # Publish test results
       - name: Publish test results
@@ -208,11 +207,10 @@ jobs:
             ${{
               job.status == 'failure'
               && format(
-                '*Test Failure Logs:*\n```\n{0}\n```\n*Helix Agent Response (raw):*\n```json\n{1}\n```\n*Helix Analysis:*\n*Short Analysis:*\n*{2}*\n*Affected Files:*\n*{3}*',
+                '*Test Failure Logs:*\n```\n{0}\n```\n*Helix Agent Response (raw):*\n```json\n{1}\n```\n*Helix Analysis:*\n*Short Analysis:*\n*{2}*',
                 steps.process_logs.outputs.failure_logs,
                 steps.helix_agent.outputs.helix_agent_response,
-                steps.parse_helix.outputs.short_analysis,
-                steps.parse_helix.outputs.affected_files
+                steps.parse_helix.outputs.short_analysis
               )
               || ''
             }}
@@ -226,7 +224,6 @@ jobs:
         uses: actions/github-script@v7
         env:
           SHORT_ANALYSIS: ${{ steps.parse_helix.outputs.short_analysis }}
-          AFFECTED_FILES: ${{ steps.parse_helix.outputs.affected_files }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -234,8 +231,7 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const shortAnalysis = process.env.SHORT_ANALYSIS || 'N/A';
-            const affectedFiles = process.env.AFFECTED_FILES || 'N/A';
-            const analysis = `### Helix Build/Test Failure Analysis\n\n**Short Analysis:**\n${shortAnalysis}\n\n**Affected Files:**\n${affectedFiles}`;
+            const analysis = `### Helix Build/Test Failure Analysis\n\n**Short Analysis:**\n${shortAnalysis}`;
             await github.rest.issues.createComment({
               owner,
               repo,
