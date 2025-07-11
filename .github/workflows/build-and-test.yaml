@@ -160,11 +160,15 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-API-Key: $API_KEY" \
             -d "$msg_body")
+          echo "Helix agent server response:"
+          echo "$agent_response"
           {
             echo 'helix_agent_response<<EOF'
             echo "$agent_response"
             echo 'EOF'
           } >> $GITHUB_OUTPUT
+          echo "steps.helix_agent.outputs.helix_agent_response:"
+          echo "${{ steps.helix_agent.outputs.helix_agent_response }}"
 
       # Parse Helix agent response for Slack
       - name: Parse Helix agent response
