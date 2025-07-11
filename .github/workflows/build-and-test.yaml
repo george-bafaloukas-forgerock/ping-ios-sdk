@@ -35,9 +35,11 @@ jobs:
           # Extract and clean the embedded JSON from the value field
           value_field=$(echo "$static_response" | python3 -c "import sys, json; obj=json.load(sys.stdin); print(obj['content'][0]['value'])")
           cleaned=$(echo "$value_field" | sed 's/^```json\\n//' | sed 's/\\n```$//')
-          # Parse the embedded JSON and echo all keys and values
+          # Remove leading/trailing whitespace and newlines
+          cleaned=$(echo "$cleaned" | awk '{$1=$1};1')
+          # Parse the embedded JSON and echo all keys and values, handling possible decode errors
           echo "Embedded JSON keys and values:"
-          echo "$cleaned" | python3 -c "import sys, json; obj=json.load(sys.stdin); [print(f'{k}: {v}') for k,v in obj.items()]"
+          python3 -c "import sys, json; import re; s=sys.stdin.read(); s=re.sub(r'^\\s*|\\s*$', '', s); try: obj=json.loads(s); [print(f'{k}: {v}') for k,v in obj.items()] except Exception as e: print('Embedded JSON decode error:', e); print('Raw embedded JSON:'); print(s)" <<< "$cleaned"
       # Create Helix conversation
       - name: Create Helix conversation
         id: create_helix
