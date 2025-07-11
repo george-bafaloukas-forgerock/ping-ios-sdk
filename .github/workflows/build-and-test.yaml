@@ -190,7 +190,7 @@ jobs:
             ${{
               job.status == 'failure'
               && format(
-                '*Test Failure Logs:*\n```\n{0}\n```\n*Helix Agent Response (raw):*\n{1}',
+                '*Test Failure Logs:* \n {0} \n \n *Helix Agent Response (raw):* \n {1}',
                 steps.process_logs.outputs.failure_logs,
                 steps.helix_agent.outputs.helix_agent_response
               )
