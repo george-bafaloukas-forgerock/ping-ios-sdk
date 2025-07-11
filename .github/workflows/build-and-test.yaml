@@ -176,20 +176,15 @@ jobs:
         id: parse_helix
         shell: bash
         run: |
+          # Use the Helix agent response output (safe for GitHub Actions)
           static_response="${{ steps.helix_agent.outputs.helix_agent_response }}"
-          # Only decode the embedded JSON in the content[0]['value'] field
-          echo "static_response: "
-          echo "$static_response"
-          value_field=$(echo "$static_response" | python3 -c "import sys, json; obj=json.load(sys.stdin); print(obj['content'][0]['value'])")
-          echo "value_field: "
-          echo "$value_field"
-          # Remove triple backticks and leading/trailing whitespace
-          cleaned=$(echo "$value_field" | sed 's/^```json//' | sed 's/^```//' | sed 's/```$//' | sed 's/```//g')
-          cleaned=$(echo "$cleaned" | awk '{$1=$1};1')
-          echo "cleaned: "
-          echo "$cleaned"
-          # Extract shortAnalysis from cleaned JSON
-          short_analysis=$(echo "$cleaned" | python3 -c "import sys, json; s=sys.stdin.read(); print(json.loads(s)['shortAnalysis'])")
+          # Write to a temp file to avoid shell parsing errors
+          echo "$static_response" > helix_response.json
+          value_field=$(python3 -c "import sys, json; obj=json.load(open('helix_response.json')); print(obj['content'][0]['value'])")
+          echo "$value_field" > helix_value.json
+          cleaned=$(cat helix_value.json | sed 's/^```json//' | sed 's/^```//' | sed 's/```$//' | sed 's/```//g' | awk '{$1=$1};1')
+          echo "$cleaned" > helix_cleaned.json
+          short_analysis=$(python3 -c "import sys, json; obj=json.load(open('helix_cleaned.json')); print(obj['shortAnalysis'])")
           echo "Short Analysis: $short_analysis"
           # Make short_analysis available for later steps
           echo "short_analysis<<EOF" >> $GITHUB_OUTPUT
