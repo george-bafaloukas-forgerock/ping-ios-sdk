@@ -24,6 +24,22 @@ jobs:
       SIM_OS_VERSION: ${{ vars.SIM_OS_VERSION }}
 
     steps:
+      # Step: Parse static Helix agent response string and echo each value
+      - name: Parse static Helix agent response example
+        shell: bash
+        run: |
+          static_response='{"message_class":"complete","conversation_id":"b1257b9e-367a-41be-9e6a-4e7ce8243eb5","message_id":"3928cd58-a86f-46fe-a5ba-985bbf963b0a","channel_id":"01dd5295-4c15-4cae-9654-49175dd2b561","content":[{"class":"complete","date_time":"2025-07-10T16:09:41.354087769Z","field_id":"endNode","field_label":"task0ef9ac5c8a58","type":"text","value":"```json\n{\n  \"shortAnalysis\": \"The build failed due to multiple test failures. Changes in `CookieModule.swift` that clear in-memory cookies prematurely are the likely cause, and these failures were exposed by re-enabling previously disabled tests in the test plan.\",\n  \"failureCausedByChanges\": true,\n  \"affectedFiles\": [\n    {\n      \"file\": \"Orchestrate/Orchestrate/CookieModule.swift\",\n      \"lines\": \"83, 108\",\n      \"comment\": \"The addition of `await storage?.deleteCookies(url: url)` at the beginning of the `inject` and `handle` methods is the likely cause of the `CookieModuleTests` failure. This new logic clears cookies from storage before the test can validate their state.\"\n    },\n    {\n      \"file\": \"PingTestHost/PingTestHost.xctestplan\",\n      \"lines\": \"24-78\",\n      \"comment\": \"Several test suites, including ones that are now failing, were re-enabled in the test plan. This change exposed the breaking code modifications in `CookieModule.swift`.\"\n    }\n  ]\n}\n```"}]}'
+          # Only decode the embedded JSON in the content[0]['value'] field
+          value_field=$(echo "$static_response" | python3 -c "import sys, json; obj=json.load(sys.stdin); print(obj['content'][0]['value'])")
+          # Remove triple backticks and leading/trailing whitespace
+          cleaned=$(echo "$value_field" | sed 's/^```json//' | sed 's/^```//' | sed 's/```$//' | sed 's/```//g')
+          cleaned=$(echo "$cleaned" | awk '{$1=$1};1')
+          # Parse and echo only the embedded JSON keys and values
+          echo "Cleaned: "
+          echo "$cleaned"
+          # Extract shortAnalysis from cleaned JSON
+          short_analysis=$(echo "$cleaned" | python3 -c "import sys, json; s=sys.stdin.read(); print(json.loads(s)['shortAnalysis'])")
+          echo "Short Analysis: $short_analysis"
       # Create Helix conversation
       - name: Create Helix conversation
         id: create_helix
@@ -144,11 +160,14 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-API-Key: $API_KEY" \
             -d "$msg_body")
+          echo "Helix agent server response:"
+          echo "$agent_response"
           {
             echo 'helix_agent_response<<EOF'
             echo "$agent_response"
             echo 'EOF'
           } >> $GITHUB_OUTPUT
+
 
       # Publish test results
       - name: Publish test results
@@ -168,7 +187,37 @@ jobs:
           fields: repo,author,eventName,message,job,pullRequest,took
           status: ${{ job.status }}
           text: |
-            ${{ job.status == 'failure' && format('Test Failure Logs:\n```{0}```\nHelix Agent Response:\n```{1}```', steps.process_logs.outputs.failure_logs, steps.helix_agent.outputs.helix_agent_response) || '' }}
+            ${{
+              job.status == 'failure'
+              && format(
+                '*Test Failure Logs:* \n {0} \n \n *Helix Agent Response (raw):* \n {1}',
+                steps.process_logs.outputs.failure_logs,
+                steps.helix_agent.outputs.helix_agent_response
+              )
+              || ''
+            }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
         if: always()
+
+      # Comment on PR with Helix agent response
+      - name: Comment on PR with Helix agent response
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          HELIX_AGENT_RESPONSE: ${{ steps.helix_agent.outputs.helix_agent_response }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const helixAgentResponse = process.env.HELIX_AGENT_RESPONSE || 'N/A';
+            const analysis = `### Helix Build/Test Failure Analysis\n\n**Helix Agent Response (raw):**\n\n
+            \`\`\`json\n${helixAgentResponse}\n\`\`\``;
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: prNumber,
+              body: analysis
+            });
