@@ -36,8 +36,11 @@ jobs:
           cleaned=$(echo "$cleaned" | awk '{$1=$1};1')
           # Parse and echo only the embedded JSON keys and values
           echo "Embedded JSON keys and values (from content[0]['value']):"
-          echo "$cleaned"
-          python3 -c "import sys, json;\n s = sys.stdin.read()\n try:\n    obj = json.loads(s)\n    for k, v in obj.items():\n        print(f'{k}: {v}')\n except Exception as e:\n    print('Embedded JSON decode error:', e)\n    print('Raw embedded JSON:')\n    print(s)" <<< "$cleaned"
+          # Remove the first 7 and last 3 characters from $cleaned
+          trimmed=$(echo "$cleaned" | awk '{print substr($0,8,length($0)-10)}')
+          echo "$trimmed"
+          summary=$(echo "$trimmed" | python3 -c "import sys, json; obj=json.load(sys.stdin); print(obj['shortAnalysis'])")
+          echo "Short Analysis: $summary"
       # Create Helix conversation
       - name: Create Helix conversation
         id: create_helix
