@@ -20,7 +20,7 @@ extension DaVinci {
     /// Method to create a DaVinci instance.
     /// - Parameter block: The configuration block.
     /// - Returns: The DaVinci instance.
-    public static func createDaVinci(block: @Sendable (DaVinciConfig) -> Void = {_ in }) -> DaVinci {
+    public static func createDavinci(block: @Sendable (DaVinciConfig) -> Void = {_ in }) -> DaVinci {
         let config = DaVinciConfig()
         config.module(CustomHeader.config) { customHeaderConfig in
             customHeaderConfig.header(name: Request.Constants.xRequestedWith, value: Request.Constants.pingSdk)
