@@ -39,8 +39,6 @@ jobs:
           # Remove the first 7 and last 3 characters from $cleaned
           trimmed=$(echo "$cleaned" | awk '{print substr($0,8,length($0)-10)}')
           echo "$trimmed"
-          summary=$(echo "$trimmed" | python3 -c "import sys, json; obj=json.load(sys.stdin); print(obj['shortAnalysis'])")
-          echo "Short Analysis: $summary"
       # Create Helix conversation
       - name: Create Helix conversation
         id: create_helix
