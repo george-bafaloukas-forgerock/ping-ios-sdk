@@ -24,6 +24,19 @@ jobs:
       SIM_OS_VERSION: ${{ vars.SIM_OS_VERSION }}
 
     steps:
+      # Step: Parse static Helix agent response string and echo each value
+      - name: Parse static Helix agent response example
+        shell: bash
+        run: |
+          static_response='{"message_class":"complete","conversation_id":"b1257b9e-367a-41be-9e6a-4e7ce8243eb5","message_id":"3928cd58-a86f-46fe-a5ba-985bbf963b0a","channel_id":"01dd5295-4c15-4cae-9654-49175dd2b561","content":[{"class":"complete","date_time":"2025-07-10T16:09:41.354087769Z","field_id":"endNode","field_label":"task0ef9ac5c8a58","type":"text","value":"```json\n{\n  \"shortAnalysis\": \"The build failed due to multiple test failures. Changes in `CookieModule.swift` that clear in-memory cookies prematurely are the likely cause, and these failures were exposed by re-enabling previously disabled tests in the test plan.\",\n  \"failureCausedByChanges\": true,\n  \"affectedFiles\": [\n    {\n      \"file\": \"Orchestrate/Orchestrate/CookieModule.swift\",\n      \"lines\": \"83, 108\",\n      \"comment\": \"The addition of `await storage?.deleteCookies(url: url)` at the beginning of the `inject` and `handle` methods is the likely cause of the `CookieModuleTests` failure. This new logic clears cookies from storage before the test can validate their state.\"\n    },\n    {\n      \"file\": \"PingTestHost/PingTestHost.xctestplan\",\n      \"lines\": \"24-78\",\n      \"comment\": \"Several test suites, including ones that are now failing, were re-enabled in the test plan. This change exposed the breaking code modifications in `CookieModule.swift`.\"\n    }\n  ]\n}\n```"}]}'
+          # Extract the value field from the content array using Perl
+          value_field=$(echo "$static_response" | perl -0777 -ne 'print $1 if /"value"\s*:\s*"(.*?)"[\},]/s')
+          cleaned=$(echo "$value_field" | sed 's/^```json\\n//' | sed 's/\\n```$//')
+          unescaped=$(printf "%b" "$cleaned")
+          short_analysis=$(echo "$unescaped" | perl -0777 -ne 'print $1 if /"shortAnalysis"\s*:\s*"((?:[^"\\]|\\.)*)"/s')
+          affected_files=$(echo "$unescaped" | perl -0777 -ne 'print $1 if /"affectedFiles"\s*:\s*(\[[^\]]*\])/s')
+          echo "Static Parse: shortAnalysis: $short_analysis"
+          echo "Static Parse: affectedFiles: $affected_files"
       # Create Helix conversation
       - name: Create Helix conversation
         id: create_helix
