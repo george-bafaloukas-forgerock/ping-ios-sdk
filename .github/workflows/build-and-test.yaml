@@ -35,10 +35,12 @@ jobs:
           cleaned=$(echo "$value_field" | sed 's/^```json\\n//' | sed 's/\\n```$//')
           cleaned=$(echo "$cleaned" | awk '{$1=$1};1')
           # Parse and echo only the embedded JSON keys and values
-          echo "Embedded JSON keys and values (from content[0]['value']):"
+          echo "Cleaned: "
+          echo "$cleaned"
           # Remove the first 7 and last 3 characters from $cleaned
           trimmed=$(echo "$cleaned" | awk '{print substr($0,8,length($0)-10)}')
-          echo "$trimmed"
+          echo "Trimmed: "
+           echo "$trimmed"
       # Create Helix conversation
       - name: Create Helix conversation
         id: create_helix
