@@ -174,10 +174,16 @@ jobs:
         run: |
           static_response="${{ steps.helix_agent.outputs.helix_agent_response }}"
           # Only decode the embedded JSON in the content[0]['value'] field
+          echo "static_response: "
+          echo "$static_response"
           value_field=$(echo "$static_response" | python3 -c "import sys, json; obj=json.load(sys.stdin); print(obj['content'][0]['value'])")
+          echo "value_field: "
+          echo "$value_field"
           # Remove triple backticks and leading/trailing whitespace
           cleaned=$(echo "$value_field" | sed 's/^```json//' | sed 's/^```//' | sed 's/```$//' | sed 's/```//g')
           cleaned=$(echo "$cleaned" | awk '{$1=$1};1')
+          echo "cleaned: "
+          echo "$cleaned"
           # Extract shortAnalysis from cleaned JSON
           short_analysis=$(echo "$cleaned" | python3 -c "import sys, json; s=sys.stdin.read(); print(json.loads(s)['shortAnalysis'])")
           echo "Short Analysis: $short_analysis"
