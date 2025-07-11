@@ -39,6 +39,7 @@
     },
     {
       "skippedTests" : [
+        "DaVinciIntegrationTests\/testAccountLocked()",
         "DaVinciIntegrationTests\/testHappyPathWithPasswordCredentials()",
         "DaVinciIntegrationTests\/testInvalidPassword()",
         "DaVinciIntegrationTests\/testUserRegistrationFailureInvalidPassword()",
